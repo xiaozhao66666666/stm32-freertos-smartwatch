@@ -27,6 +27,7 @@
 /* USER CODE BEGIN Includes */
 #include "event_groups.h"
 #include "queue.h"
+#include "semphr.h"
 #include "u8g2.h"
 #include "beep.h"
 #include "Data.h"
@@ -79,7 +80,8 @@ TaskHandle_t xShowWoodenFishTaskHandle = NULL;
 TaskHandle_t xShowDHT11TaskHandle = NULL;
 TaskHandle_t xShowHRSPO2TaskHandle = NULL;
 
-QueueHandle_t g_xQueueMenu;	
+QueueHandle_t g_xQueueMenu;
+SemaphoreHandle_t g_ui_mtx;   /* u8g2 全局帧缓冲互斥（显示硬件+static 显存单份） */
 uint16_t key1_filter = 0;
 uint16_t key2_filter = 0;
 uint16_t key3_filter = 0;
@@ -159,6 +161,11 @@ void MX_FREERTOS_Init(void) {
   /* add threads, ... */
   
   /* create some tasks */
+	/* 单次初始化：原来 ShowTimeTask(len1)/ShowMenuTask(len4) 各自重建队列，
+	 * 句柄互相覆盖、旧队列泄漏、ISR 事件丢失——现统一在此创建一次 */
+	g_xQueueMenu = xQueueCreate(4, sizeof(Key_data));
+	g_ui_mtx = xSemaphoreCreateMutex();
+
 	xTaskCreate(ShowTimeTask, "ShowTimeTask", 512, NULL, osPriorityNormal, &xShowTimeTaskHandle);   /* 128→512：栈上有 u8g2_t */
 	xTaskCreate(ShowMenuTask, "ShowMenuTask", 256, NULL, osPriorityNormal, &xShowMenuTaskHandle);
 

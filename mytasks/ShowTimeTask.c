@@ -16,6 +16,8 @@
 
 /* other task handle */
 extern QueueHandle_t g_xQueueMenu;
+extern SemaphoreHandle_t g_ui_mtx;   /* freertos.c 单次创建 */
+extern u8g2_t u8g2;                  /* 全局实例（Data.c）——原为函数内局部实例，遮蔽全局且共用同一 static 显存 */
 extern TaskHandle_t xShowMenuTaskHandle;
 extern TaskHandle_t xShowTimeTaskHandle;
 extern TaskHandle_t xShowWoodenFishTaskHandle;
@@ -55,10 +57,8 @@ void ShowTimeTask(void *params)
    	vTaskSuspend(xShowCalendarTaskHandle);
    	vTaskSuspend(xShowDHT11TaskHandle);
 
-	/* create_queue */
-	g_xQueueMenu = xQueueCreate(1, 4);
-	/* u8g2 Start */
-	u8g2_t u8g2;
+	/* create_queue —— 已收敛到 freertos.c 单次创建（原 len=1 与 ShowMenu 的 len=4 互相覆盖） */
+	/* u8g2 Start：用全局实例（原局部 u8g2_t 遮蔽全局，双实例共用同一块 static 显存） */
 	u8g2_Setup_ssd1306_i2c_128x64_noname_f(&u8g2,U8G2_R0, u8x8_byte_hw_i2c, u8g2_stm32_delay);
 	u8g2_InitDisplay(&u8g2); // send init sequence to the display, display is in sleep mode after this,
 	u8g2_SetPowerSave(&u8g2, 0); // wake up display
@@ -70,7 +70,9 @@ void ShowTimeTask(void *params)
 	struct Key_data	key_data;
 
 	while(1)
-	{	
+	{
+		/* 帧级加锁：ClearBuffer..SendBuffer 与菜单任务共用同一 static 显存 */
+		if(g_ui_mtx) xSemaphoreTake(g_ui_mtx, portMAX_DELAY);
 		u8g2_ClearBuffer(&u8g2);
 		
 		/* draw */
@@ -89,6 +91,7 @@ void ShowTimeTask(void *params)
 		u8g2_DrawXBMP(&u8g2, 66, 2, 6, 8, Num_6x8[hour_unit]);
 				
 		u8g2_SendBuffer(&u8g2);
+		if(g_ui_mtx) xSemaphoreGive(g_ui_mtx);
 
 		vTaskDelay(250);
 		/* handle queue data */

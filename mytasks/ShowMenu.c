@@ -16,6 +16,7 @@
 
 extern u8g2_t u8g2;
 extern QueueHandle_t g_xQueueMenu;
+extern SemaphoreHandle_t g_ui_mtx;   /* freertos.c 单次创建 */
 //extern SemaphoreHandle_t g_xSemMenu; 
 
 extern TaskHandle_t xShowMenuTaskHandle;
@@ -84,25 +85,28 @@ void ShowMenuTask(void *params)
 	/* system sound */
 	buzzer_init();
    
-	/* create queue */
-	g_xQueueMenu = xQueueCreate(4, 4);
-	if(NULL != g_xQueueMenu)HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);	
+	/* create queue —— 已收敛到 freertos.c 单次创建（原 len=4 与 ShowTimeTask 的 len=1 互相覆盖） */
+	if(NULL != g_xQueueMenu)HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
 	/*u8g2_config*/
 	u8g2_config();
-	/* ShowUI */
+	/* ShowUI（帧级加锁：与 ShowTimeTask 共用同一 static 显存） */
 //	u8g2_SetFont(&u8g2, u8g2_font_wqy16_t_chinese1);
+	if(g_ui_mtx) xSemaphoreTake(g_ui_mtx, portMAX_DELAY);
 	u8g2_FirstPage(&u8g2);
 	do {
 	u8g2_SendBuffer(&u8g2);
    	} while (u8g2_NextPage(&u8g2));
-	
+	if(g_ui_mtx) xSemaphoreGive(g_ui_mtx);
+
 	struct Key_data	key_data;
-	
+
 	while(1)
 	{
+		if(g_ui_mtx) xSemaphoreTake(g_ui_mtx, portMAX_DELAY);
 		u8g2_ClearBuffer(&u8g2);
 		ShowUI();
 		u8g2_SendBuffer(&u8g2);
+		if(g_ui_mtx) xSemaphoreGive(g_ui_mtx);
 		/* receive queue data and keep waitting */
 		if(queue_flag == 0)
 		{

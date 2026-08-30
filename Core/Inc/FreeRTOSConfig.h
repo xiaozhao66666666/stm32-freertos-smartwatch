@@ -60,7 +60,7 @@
 #define configTICK_RATE_HZ                       ((TickType_t)1000)
 #define configMAX_PRIORITIES                     ( 56 )
 #define configMINIMAL_STACK_SIZE                 ((uint16_t)128)
-#define configTOTAL_HEAP_SIZE                    ((size_t)1024*16)   /* 8K→16K：9任务栈+队列全从堆分配，8K 时栈溢出踩内存 */
+#define configTOTAL_HEAP_SIZE                    ((size_t)1024*12)   /* 8K→12K：C8T6 总 20K RAM，16K 实测链接溢出 3.8K（Keil L6406E）；12K 可容纳全部任务栈 */
 #define configMAX_TASK_NAME_LEN                  ( 16 )
 #define configUSE_TRACE_FACILITY                 1
 #define configUSE_16_BIT_TICKS                   0
