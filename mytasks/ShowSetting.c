@@ -4,7 +4,7 @@
 #include "main.h"
 #include "cmsis_os.h"
 #include "event_groups.h"
-//#include "semphr.h"
+#include "semphr.h"
 #include "queue.h"
 
 /* Private includes ----------------------------------------------------------*/
@@ -17,6 +17,7 @@
 extern TaskHandle_t xShowMenuTaskHandle;
 extern QueueHandle_t g_xQueueMenu;
 extern u8g2_t u8g2;
+extern SemaphoreHandle_t g_ui_mtx;   /* freertos.c 单次创建 */
 extern BaseType_t end_flag;
 extern BaseType_t seclect_end;
 
@@ -75,17 +76,19 @@ void ShowSwitch(int switch_status)
 void ShowSetting_Task(void)
 {
 	buzzer_init();
-	/* 创建队列 */
-	g_xQueueMenu = xQueueCreate(4, 4);
+	/* 队列已收敛到 freertos.c 单次创建（迭代22） */
 	if(NULL != g_xQueueMenu)HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
 
 	u8g2_config();
-	u8g2_SetFont(&u8g2, u8g2_font_7x13_mf);	
+	u8g2_SetFont(&u8g2, u8g2_font_7x13_mf);
+	/* 帧级加锁：FirstPage..NextPage 与其它任务共用同一 static 显存 */
+	if(g_ui_mtx) xSemaphoreTake(g_ui_mtx, portMAX_DELAY);
     u8g2_FirstPage(&u8g2);
 	do {
 	ShowSetiing();
 	u8g2_SendBuffer(&u8g2);
    	} while (u8g2_NextPage(&u8g2));
+	if(g_ui_mtx) xSemaphoreGive(g_ui_mtx);
 	for(int i = 0; i<5; i++)
 	{
 		width[i] = u8g2_GetStrWidth(&u8g2, &strs[i][10]);
@@ -94,6 +97,8 @@ void ShowSetting_Task(void)
 
 	while(1)
 	{
+		/* 帧级加锁：ClearBuffer..SendBuffer 与其它任务共用同一 static 显存 */
+		if(g_ui_mtx) xSemaphoreTake(g_ui_mtx, portMAX_DELAY);
 		u8g2_ClearBuffer(&u8g2);
 		 		
 		switch(seclect)
@@ -106,6 +111,7 @@ void ShowSetting_Task(void)
 		}
 		ShowSetiing();
 		u8g2_SendBuffer(&u8g2);
+		if(g_ui_mtx) xSemaphoreGive(g_ui_mtx);
 		if(seclect_end == 0)
 		{
 			pdPASS == xQueueReceive(g_xQueueMenu, &key_data, portMAX_DELAY);

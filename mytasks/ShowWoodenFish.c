@@ -26,8 +26,7 @@ void ShowWoodenFishTask(void *params)
 	
 	/* system sound */
 	buzzer_init();
-	/* 创建队列 */
-	g_xQueueMenu = xQueueCreate(4, 4);
+	/* 队列已收敛到 freertos.c 单次创建（迭代22） */
 	if(NULL != g_xQueueMenu)HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
 
 	/* u8g2 Start */

@@ -48,8 +48,7 @@ void RootTask(void)
 //	vTaskSuspend(xShowWoodenFishTaskHandle);
 //	vTaskSuspend(xShowDht11TaskHandle);
 
-	/* 创建队列 */
-	g_xQueueMenu = xQueueCreate(1, 4);	
+	/* 队列已收敛到 freertos.c 单次创建（迭代22；RootTask 已弃用未创建） */
 	struct Key_data	key_data;
 		vTaskResume(xShowTimeTaskHandle);
 	while(1)

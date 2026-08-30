@@ -5,6 +5,7 @@
 #include "cmsis_os.h"
 #include "event_groups.h"
 #include "queue.h"
+#include "semphr.h"
 #include <stdio.h>
 
 /* Private includes ----------------------------------------------------------*/
@@ -18,6 +19,8 @@
 
 extern TaskHandle_t xShowMenuTaskHandle;
 extern QueueHandle_t g_xQueueMenu;
+extern u8g2_t u8g2;                  /* 全局实例（Data.c）：原函数内局部 u8g2_t 已删除 */
+extern SemaphoreHandle_t g_ui_mtx;   /* freertos.c 单次创建 */
 
 /* 判断闰年 */
 int judge_year(int year)
@@ -85,11 +88,9 @@ int month_ping(int n){
 void ShowCalendarTask(void *params)
 {
 	buzzer_init();
-	/* 创建队列 */
-	g_xQueueMenu = xQueueCreate(1, 4);
+	/* 队列已收敛到 freertos.c 单次创建（迭代22） */
 	if(NULL != g_xQueueMenu)HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
 
-	u8g2_t u8g2;
 	u8g2_Setup_ssd1306_i2c_128x64_noname_f(&u8g2,U8G2_R0, u8x8_byte_hw_i2c, u8g2_stm32_delay);
 	u8g2_InitDisplay(&u8g2); // send init sequence to the display, display is in sleep mode after this,
 	u8g2_SetPowerSave(&u8g2, 0); // wake up display
@@ -114,8 +115,10 @@ void ShowCalendarTask(void *params)
 	uint16_t wee = 0;	//记录当前月的第一天是星期几
 	
 	while(1)
-	{	
-		u8g2_ClearBuffer(&u8g2);			
+	{
+		/* 帧级加锁：ClearBuffer..SendBuffer 与其它任务共用同一 static 显存 */
+		if(g_ui_mtx) xSemaphoreTake(g_ui_mtx, portMAX_DELAY);
+		u8g2_ClearBuffer(&u8g2);
 			
 		for(int i=0; i<=6; i++){
 			u8g2_DrawStr(&u8g2, usWeekX[i], 8, ucWeekHeader[i]);			
@@ -148,8 +151,9 @@ void ShowCalendarTask(void *params)
 		u8g2_DrawLine(&u8g2, 115, 0, 115, 62);
 		u8g2_DrawStr(&u8g2, 117, 32, ucMonthDay[line_pos+1]);	
 		u8g2_DrawHLine(&u8g2, usLineY[line_pos], 63, 11);
-		
+
 		u8g2_SendBuffer(&u8g2);
+		if(g_ui_mtx) xSemaphoreGive(g_ui_mtx);
 
 		/* 读按键中断队列 */
 		xQueueReceive(g_xQueueMenu, &key_data, portMAX_DELAY);

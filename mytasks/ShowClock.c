@@ -5,6 +5,7 @@
 #include "cmsis_os.h"
 #include "event_groups.h"
 #include "queue.h"
+#include "semphr.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "beep.h"
@@ -18,6 +19,7 @@ extern TaskHandle_t xShowMenuTaskHandle;
 extern TimerHandle_t g_Clock_Timer;
 extern QueueHandle_t g_xQueueMenu;
 extern u8g2_t u8g2;
+extern SemaphoreHandle_t g_ui_mtx;   /* freertos.c 单次创建 */
 
 uint16_t millisecond;
 uint8_t len1, len2;
@@ -57,8 +59,7 @@ void ShowClockTimeTask(void *params)
 	/* system sound */
 	buzzer_init();
 
-	/* 创建队列 */
-	g_xQueueMenu = xQueueCreate(1, 4);
+	/* 队列已收敛到 freertos.c 单次创建（迭代22） */
 	if(NULL != g_xQueueMenu)HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
 
 	/* u8g2 Start */
@@ -73,10 +74,13 @@ void ShowClockTimeTask(void *params)
 	struct Key_data	key_data;	
 	while(1)
 	{
+		/* 帧级加锁：ClearBuffer..SendBuffer 与其它任务共用同一 static 显存 */
+		if(g_ui_mtx) xSemaphoreTake(g_ui_mtx, portMAX_DELAY);
 		u8g2_ClearBuffer(&u8g2);
-		ShowClock();		
+		ShowClock();
 		//u8g2_DrawXBMP(&u8g2, 0, 0, 20, 40, BigNum[temp]);
 		u8g2_SendBuffer(&u8g2);
+		if(g_ui_mtx) xSemaphoreGive(g_ui_mtx);
 		
 		/* 读按键中断队列 */
 		if(clock_flag == 0)
