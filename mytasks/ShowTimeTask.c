@@ -116,6 +116,9 @@ void TimerCallBackFun(TimerHandle_t xTimer)
 	if(sec_decade>5){sec_decade = 0; min_unit++;}
 	if(min_unit>9){min_unit = 0; min_decade++;}
 	if(min_decade>5){min_decade = 0; hour_unit++;}
-	if(hour_unit>5){hour_unit = 0; hour_decade++;}
+	if(hour_unit>9){hour_unit = 0; hour_decade++;}                    /* 原为 >5：16 时以后的个位被错误进位 */
+	if(hour_decade>2 || (hour_decade==2 && hour_unit>3)){             /* 24 小时制：23:59 → 00:00 */
+		hour_decade = 0; hour_unit = 0;
+	}
 	
 }

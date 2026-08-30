@@ -41,7 +41,7 @@ void ShowDHT11Task(void *params)
 	int hum, temp;
     int hum1, hum2, hum3, temp1, temp2 ,temp3;
 
-    int max;
+    int max = 20;   /* 初始化为最低档：原为未初始化读取（UB），档位判断语义不变 */
 	int g_max[] = {20, 30, 40, 50, 60, 70};
 	
 	while(1)
@@ -52,9 +52,9 @@ void ShowDHT11Task(void *params)
 			DHT11_Init();
 		}
 		else{
-			temp1 = temp%20;	//low bit
+			temp1 = temp%10;	//个位（原 %20 在 30℃ 时算出 10，数码显示错乱）
 			temp3 = temp/10;
-			temp2 = temp3%20;   //high bit
+			temp2 = temp3%10;   //十位
 						
 			for(int i=0; i<5; i++)
 			{

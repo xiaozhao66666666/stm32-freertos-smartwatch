@@ -52,7 +52,7 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 
-#define Task_default_size 128
+#define Task_default_size 256   /* 128→256：512B 栈放不下 u8g2 局部调用链 */
 
 /* USER CODE END PD */
 
@@ -159,7 +159,7 @@ void MX_FREERTOS_Init(void) {
   /* add threads, ... */
   
   /* create some tasks */
-	xTaskCreate(ShowTimeTask, "ShowTimeTask", 128, NULL, osPriorityNormal, &xShowTimeTaskHandle);
+	xTaskCreate(ShowTimeTask, "ShowTimeTask", 512, NULL, osPriorityNormal, &xShowTimeTaskHandle);   /* 128→512：栈上有 u8g2_t */
 	xTaskCreate(ShowMenuTask, "ShowMenuTask", 256, NULL, osPriorityNormal, &xShowMenuTaskHandle);
 
 /******** 5 apps ********/
@@ -168,7 +168,7 @@ void MX_FREERTOS_Init(void) {
 	/*2*/
   	xTaskCreate(ShowFlashLightTask, "ShowFlashLightTask", Task_default_size, NULL, osPriorityNormal, &xShowFlashLightTaskHandle);
     /*3*/
-  	xTaskCreate(ShowDHT11Task, "ShowDHT11Task", Task_default_size, NULL, osPriorityNormal, &xShowDHT11TaskHandle);
+  	xTaskCreate(ShowDHT11Task, "ShowDHT11Task", 512, NULL, osPriorityNormal, &xShowDHT11TaskHandle);  /* Task_default_size→512 */
 	//xTaskCreate(ShowWoodenFishTask, "ShowWoodenFishTask", Task_default_size, NULL, osPriorityNormal, &xShowWoodenFishTaskHandle);
     /*4*/
   	xTaskCreate(ShowClockTimeTask, "ShowClockTimeTask", Task_default_size, NULL, osPriorityNormal, &xShowClockTaskHandle);
@@ -211,61 +211,55 @@ void StartDefaultTask(void *argument)
 /* Private application code --------------------------------------------------*/
 /* USER CODE BEGIN Application */
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
-{	
-	/* key interrupt : send data to queue */
-	
-	/* some data maybe useless */
-	extern BaseType_t end_flag;
-	extern BaseType_t seclect_end;
-	BaseType_t  RM_Flag, LM_Flag, EN_Flag, EX_Flag;
+{
+	/* key interrupt : send data to queue
+	 * 修复：原实现 ISR 内 for(5000) 忙等"消抖"且读非 volatile 任务变量——
+	 * 现改为时间戳消抖（非阻塞）+ volatile 读取；消抖窗口 200ms。 */
+	extern volatile uint32_t end_flag;      /* 定义在 ShowMenu.c（已加 volatile） */
+	extern volatile uint32_t seclect_end;
+	static uint32_t last_ms[4] = {0, 0, 0, 0};
+	uint32_t now = HAL_GetTick();
+	int idx = (GPIO_Pin == GPIO_PIN_11) ? 0 : (GPIO_Pin == GPIO_PIN_10) ? 1
+	        : (GPIO_Pin == GPIO_PIN_1)  ? 2 : 3;
 	Key_data key_data;
-		
+
+	if (now - last_ms[idx] < 200) return;   /* 消抖窗口 */
+	last_ms[idx] = now;
+
     if(GPIO_Pin == GPIO_PIN_11)
-	{ 
-		for(int i = 0; i<5000; i++){}
+	{
 		if(end_flag == 1&&seclect_end == 0)
 		{
-			RM_Flag = 1;
-			key_data.rdata = RM_Flag;
+			key_data.rdata = 1;
 			xQueueSendToBackFromISR(g_xQueueMenu, &key_data, NULL);
 			HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
-			RM_Flag = 0;			
 		}
 	}
 	if(GPIO_Pin == GPIO_PIN_10)
-	{ 
-		for(int i = 0; i<5000; i++){}
+	{
 		if(end_flag == 1&&seclect_end == 0)
 		{
-		 	LM_Flag = 1;
-			key_data.ldata = LM_Flag;
+		 	key_data.ldata = 1;
 			xQueueSendToBackFromISR(g_xQueueMenu, &key_data, NULL);
 			HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
-			LM_Flag = 0;
 		}
 	}
 	if(GPIO_Pin == GPIO_PIN_1)
 	{
-		for(int i = 0; i<5000; i++){}		
 		if(end_flag == 1&&seclect_end == 0)
 		{
-			EN_Flag = 1;
-			key_data.updata = EN_Flag;
+			key_data.updata = 1;
 			xQueueSendToBackFromISR(g_xQueueMenu, &key_data, NULL);
 			HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
-			EN_Flag = 0;
 		}
 	}
 	if(GPIO_Pin == GPIO_PIN_0)
 	{
-		for(int i = 0; i<5000; i++){}		
 		if(end_flag == 1&&seclect_end == 0)
 		{
-			EX_Flag = 1;
-			key_data.exdata = EX_Flag;
-			if(end_flag == 1&&seclect_end == 0)xQueueSendToBackFromISR(g_xQueueMenu, &key_data, NULL);
+			key_data.exdata = 1;
+			xQueueSendToBackFromISR(g_xQueueMenu, &key_data, NULL);
 			HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
-			EX_Flag = 0;
 		}
 	}
 }

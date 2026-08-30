@@ -52,6 +52,7 @@ BaseType_t select = 3;
 int queue_flag = 0;
 uint32_t end_flag = 1;
 uint32_t seclect_end = 0;//showsetting
+/* ↑ 由 EXTI 回调（中断上下文）读取：必须 volatile，否则 -O2 下 ISR 读到的是寄存器缓存值 */
 
 /* draw app's icon */
 void ShowUI(void)
